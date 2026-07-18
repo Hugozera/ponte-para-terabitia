@@ -1,0 +1,5 @@
+.agents/
+.codex/
+*.log
+preview*.png
+livro_ligia/conteudo.privado.json

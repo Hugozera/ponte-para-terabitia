@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Carta aberta Para Lígia</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,500&family=Parisienne&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./scene.css?v=20260704d" />
+  <link rel="stylesheet" href="./style.css?v=20260704d" />
+  <style>
+    /* ===== Portão secreto: só quem sabe a frase entra ===== */
+    .gate {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: radial-gradient(120% 90% at 50% 20%, #3b2b45 0%, #241a30 55%, #150e1e 100%);
+      transition: opacity .6s ease, visibility .6s;
+    }
+    .gate.gate-open {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+    .gate-card {
+      width: min(430px, 92vw);
+      background: linear-gradient(165deg, #f7eeda, #ecdcbc);
+      border: 1px solid rgba(120, 90, 50, .35);
+      border-radius: 14px;
+      padding: 38px 34px 28px;
+      text-align: center;
+      color: #4a3722;
+      box-shadow: 0 30px 80px rgba(0, 0, 0, .55), inset 0 0 60px rgba(139, 105, 58, .18);
+    }
+    .gate-heart {
+      display: block;
+      font-family: "Parisienne", cursive;
+      font-size: 2.1rem;
+      line-height: 1;
+      color: #a4535f;
+    }
+    .gate-card h2 {
+      font-family: "Cinzel", serif;
+      font-size: 1.12rem;
+      letter-spacing: .06em;
+      margin: 12px 0 6px;
+      color: #52381d;
+    }
+    .gate-sub {
+      font-family: "Cormorant Garamond", serif;
+      font-size: 1.18rem;
+      font-style: italic;
+      margin-bottom: 22px;
+    }
+    #gateForm {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    #gateInput {
+      font-family: "Cormorant Garamond", serif;
+      font-size: 1.2rem;
+      text-align: center;
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1px solid rgba(120, 90, 50, .45);
+      background: rgba(255, 252, 244, .85);
+      color: #43301a;
+      outline: none;
+    }
+    #gateInput:focus {
+      border-color: #a4535f;
+      box-shadow: 0 0 0 3px rgba(164, 83, 95, .18);
+    }
+    #gateForm button {
+      font-family: "Cinzel", serif;
+      font-size: .95rem;
+      letter-spacing: .12em;
+      padding: 11px 14px;
+      border-radius: 10px;
+      border: 1px solid rgba(120, 90, 50, .5);
+      background: linear-gradient(180deg, #8a5a63, #6d3f4a);
+      color: #f7eeda;
+      cursor: pointer;
+    }
+    #gateForm button:hover {
+      filter: brightness(1.08);
+    }
+    .gate-error {
+      min-height: 1.3em;
+      font-family: "Cormorant Garamond", serif;
+      font-size: 1.05rem;
+      font-style: italic;
+      color: #8e4450;
+      margin-top: 12px;
+    }
+    .gate-hint {
+      font-family: "Cormorant Garamond", serif;
+      font-size: .95rem;
+      opacity: .6;
+      margin-top: 4px;
+    }
+    .gate-card.shake {
+      animation: gateShake .5s;
+    }
+    @keyframes gateShake {
+      20% { transform: translateX(-9px); }
+      40% { transform: translateX(8px); }
+      60% { transform: translateX(-6px); }
+      80% { transform: translateX(4px); }
+      100% { transform: translateX(0); }
+    }
+  </style>
+</head>
+<body>
+  <!-- ===== Portão secreto: só quem sabe a frase entra ===== -->
+  <div class="gate" id="gate">
+    <div class="gate-card" role="dialog" aria-modal="true" aria-labelledby="gateTitle">
+      <span class="gate-heart" aria-hidden="true">♡</span>
+      <h2 id="gateTitle">Este livro é só para uma pessoa</h2>
+      <p class="gate-sub">Se ele é seu, você sabe a nossa frase.</p>
+      <form id="gateForm" autocomplete="off">
+        <input id="gateInput" type="text" placeholder="a nossa frase secreta…" aria-label="Frase secreta" autocapitalize="off" autocorrect="off" spellcheck="false" />
+        <button type="submit">Abrir o livro</button>
+      </form>
+      <p class="gate-error" id="gateError" aria-live="polite"></p>
+      <p class="gate-hint">dica: tudo começou com um susto</p>
+    </div>
+  </div>
+  <script>
+    (function () {
+      var gate = document.getElementById("gate");
+      var card = gate.querySelector(".gate-card");
+      var form = document.getElementById("gateForm");
+      var input = document.getElementById("gateInput");
+      var error = document.getElementById("gateError");
+      var button = form.querySelector("button");
+      var KEY = "livro-ligia-chave-v1";
+
+      var payloadPromise = fetch("./conteudo.enc.json?v=20260718b").then(function (res) {
+        if (!res.ok) throw new Error("http " + res.status);
+        return res.json();
+      });
+
+      function fromB64(text) {
+        var bin = atob(text);
+        var bytes = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+        return bytes;
+      }
+
+      function toB64(buffer) {
+        var bytes = new Uint8Array(buffer);
+        var bin = "";
+        for (var i = 0; i < bytes.length; i += 1) bin += String.fromCharCode(bytes[i]);
+        return btoa(bin);
+      }
+
+      function normalize(text) {
+        var decomposed = text.toLowerCase().normalize("NFD");
+        var out = "";
+        for (var i = 0; i < decomposed.length; i += 1) {
+          var code = decomposed.charCodeAt(i);
+          if (code >= 768 && code <= 879) continue; /* acentos soltos pelo NFD */
+          var ch = decomposed[i];
+          if ((ch >= "a" && ch <= "z") || (ch >= "0" && ch <= "9")) out += ch;
+        }
+        return out;
+      }
+
+      function deliver(sections) {
+        if (window.livroStart) window.livroStart(sections);
+        else window.__livroSections = sections;
+      }
+
+      function importContentKey(rawBytes) {
+        return crypto.subtle.importKey("raw", rawBytes, "AES-GCM", false, ["decrypt"]);
+      }
+
+      function decryptContent(payload, key) {
+        return crypto.subtle.decrypt(
+          { name: "AES-GCM", iv: fromB64(payload.iv) },
+          key,
+          fromB64(payload.data)
+        ).then(function (plain) {
+          return JSON.parse(new TextDecoder().decode(plain));
+        });
+      }
+
+      async function unwrapKey(payload, phrase) {
+        var base = await crypto.subtle.importKey(
+          "raw", new TextEncoder().encode(phrase), "PBKDF2", false, ["deriveKey"]
+        );
+        for (var i = 0; i < payload.wraps.length; i += 1) {
+          var wrap = payload.wraps[i];
+          try {
+            var kek = await crypto.subtle.deriveKey(
+              { name: "PBKDF2", salt: fromB64(wrap.salt), iterations: payload.iter, hash: "SHA-256" },
+              base,
+              { name: "AES-GCM", length: 256 },
+              false,
+              ["decrypt"]
+            );
+            return await crypto.subtle.decrypt(
+              { name: "AES-GCM", iv: fromB64(wrap.iv) }, kek, fromB64(wrap.data)
+            );
+          } catch (e) { /* a frase nao abre este embrulho; tenta o proximo */ }
+        }
+        return null;
+      }
+
+      async function tryStoredKey() {
+        var stored = null;
+        try { stored = localStorage.getItem(KEY); } catch (e) { return; }
+        if (!stored) return;
+        try {
+          var payload = await payloadPromise;
+          var key = await importContentKey(fromB64(stored));
+          var content = await decryptContent(payload, key);
+          deliver(content.sections);
+          gate.remove();
+        } catch (e) {
+          try { localStorage.removeItem(KEY); } catch (err) {}
+        }
+      }
+
+      /* impede que as teclas digitadas cheguem aos atalhos do livro (setas, "o") */
+      gate.addEventListener("keydown", function (event) {
+        event.stopPropagation();
+      });
+
+      form.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        button.disabled = true;
+        error.textContent = "";
+        try {
+          var payload = await payloadPromise;
+          var raw = await unwrapKey(payload, normalize(input.value));
+          if (raw) {
+            var key = await importContentKey(raw);
+            var content = await decryptContent(payload, key);
+            try {
+              localStorage.setItem(KEY, toB64(raw));
+              localStorage.removeItem("livro-ligia-gate-v1");
+            } catch (e) {}
+            deliver(content.sections);
+            gate.classList.add("gate-open");
+            window.setTimeout(function () { gate.remove(); }, 700);
+            return;
+          }
+          error.textContent = "Essa não é a nossa frase…";
+          card.classList.remove("shake");
+          void card.offsetWidth;
+          card.classList.add("shake");
+          input.select();
+        } catch (e) {
+          error.textContent = "Não consegui carregar o livro. Verifique a conexão e tente de novo.";
+        } finally {
+          button.disabled = false;
+        }
+      });
+
+      tryStoredKey();
+      window.setTimeout(function () { input.focus(); }, 150);
+    })();
+  </script>
+
+  <main class="app" aria-label="Livro interativo Carta aberta Para Lígia">
+
+    <!-- ===== Cenário: torre de princesa ===== -->
+    <div class="scene" aria-hidden="true">
+      <div class="tower-wall"></div>
+
+      <div class="window win-left">
+        <div class="win-view">
+          <div class="sun"></div>
+          <div class="clouds"></div>
+          <div class="mountains far"></div>
+          <div class="mountains near"></div>
+        </div>
+        <div class="win-frame"></div>
+        <div class="win-sill"></div>
+      </div>
+
+      <div class="window win-right">
+        <div class="win-view">
+          <div class="clouds"></div>
+          <div class="mountains far"></div>
+          <div class="mountains near"></div>
+        </div>
+        <div class="win-frame"></div>
+        <div class="win-sill"></div>
+      </div>
+
+      <div class="curtain curtain-left"></div>
+      <div class="curtain curtain-right"></div>
+
+      <div class="sconce sconce-left"><i></i></div>
+      <div class="sconce sconce-right"><i></i></div>
+
+      <div class="light-beam"></div>
+      <div class="tower-floor"></div>
+      <div class="desk"></div>
+      <div class="candle">
+        <div class="flame"></div>
+      </div>
+      <div class="vignette"></div>
+    </div>
+
+    <!-- ===== UI ===== -->
+    <div class="top-hint">
+      <i data-lucide="hand"></i>
+      <span>Arraste o fundo para girar &middot; segure a ponta da página para puxá-la</span>
+    </div>
+
+    <aside class="tool-rail" aria-label="Ferramentas">
+      <button class="tool-button active" type="button" data-action="reset" aria-label="Centralizar livro">
+        <i data-lucide="move-3d"></i>
+        <span>Girar</span>
+      </button>
+      <button class="tool-button" type="button" data-action="zoom" aria-label="Aproximar livro">
+        <i data-lucide="search"></i>
+        <span>Zoom</span>
+      </button>
+      <button class="tool-button" type="button" data-action="details" aria-label="Ver detalhes">
+        <i data-lucide="eye"></i>
+        <span>Detalhes</span>
+      </button>
+      <button class="tool-button active" type="button" data-action="sound" aria-label="Ativar ou silenciar som">
+        <i data-lucide="volume-2"></i>
+        <span>Som</span>
+      </button>
+    </aside>
+
+    <aside class="tips">
+      <div class="tips-title">
+        <i data-lucide="lightbulb"></i>
+        <strong>Dicas</strong>
+      </div>
+      <p>Arraste o fundo para girar o livro em 3D — gire até ver a contracapa.</p>
+      <p>Role para aproximar ou afastar.</p>
+      <p>Um clique vira a página inteira.</p>
+      <p>Clique e segure a borda da página para puxá-la e dobrá-la de verdade.</p>
+    </aside>
+
+    <!-- ===== Palco 3D ===== -->
+    <section class="stage" id="stage" aria-label="Área do livro em 3D">
+      <div class="floor-shadow" id="floorShadow"></div>
+      <div class="camera" id="camera">
+        <div class="book" id="book">
+
+          <!-- contracapa (tábua de trás) + bloco de folhas da direita -->
+          <div class="board back-board">
+            <div class="face board-in lining"></div>
+            <div class="face board-out rear-face">
+              <div class="rear-border"></div>
+              <div class="rear-mark">Carta aberta<br>Para Lígia<span>♡</span></div>
+            </div>
+            <div class="board-edge fore"></div>
+            <div class="board-edge head"></div>
+            <div class="board-edge tail"></div>
+          </div>
+
+          <div class="block block-right" id="rightBlock">
+            <div class="block-edge fore"></div>
+            <div class="block-edge head"></div>
+            <div class="block-edge tail"></div>
+            <div class="face block-top" id="rightPaper" role="button" tabindex="0" aria-label="Virar para a próxima página">
+              <div class="paper-inner">
+                <div class="rule">⌁</div>
+                <div class="page-text" id="rightPage"></div>
+                <span class="page-num" id="rightNum"></span>
+              </div>
+              <div class="page-corner"></div>
+            </div>
+          </div>
+
+          <!-- lombada -> dobradiça -> capa da frente + bloco de folhas da esquerda -->
+          <div class="spine" id="spine">
+            <div class="face spine-in"></div>
+            <div class="face spine-out">
+              <span class="spine-title">Carta aberta Para Lígia</span>
+              <small>♡</small>
+            </div>
+            <div class="front-hinge" id="frontHinge">
+              <div class="board front-board" id="frontBoard" role="button" tabindex="0" aria-label="Abrir ou fechar o livro">
+                <div class="face board-in lining lining-front"></div>
+                <div class="face board-out cover-face">
+                  <img class="cover-art" src="./assets/capa-ligia.png" alt="" draggable="false" />
+                  <h1>Carta aberta<span>Para Lígia</span></h1>
+                  <p>A história de como conheci<br>a mulher mais linda que já vi.</p>
+                  <div class="cover-sheen"></div>
+                </div>
+                <div class="board-edge fore"></div>
+                <div class="board-edge head"></div>
+                <div class="board-edge tail"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- bloco de folhas da esquerda (articulado no vinco central) -->
+          <div class="block block-left" id="leftBlock">
+            <div class="block-edge fore"></div>
+            <div class="block-edge head"></div>
+            <div class="block-edge tail"></div>
+            <div class="face block-top" id="leftPaper" aria-label="Página esquerda">
+              <div class="paper-inner">
+                <div class="rule">⌁</div>
+                <div class="page-text" id="leftPage"></div>
+                <span class="page-num" id="leftNum"></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- folha que vira (segmentos criados pelo script p/ dobra real) -->
+          <div class="leaf" id="leaf" aria-hidden="true"></div>
+          <div class="bookmark" id="bookmark" aria-hidden="true">
+            <span id="bookmarkLabel">1</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <nav class="pager" aria-label="Navegação do livro">
+      <button id="prev" type="button" aria-label="Página anterior">
+        <i data-lucide="chevron-left"></i>
+      </button>
+      <span id="pageLabel">Capa</span>
+      <button id="next" type="button" aria-label="Próxima página">
+        <i data-lucide="chevron-right"></i>
+      </button>
+    </nav>
+  </main>
+
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script src="./script.js?v=20260718b"></script>
+</body>
+</html>
